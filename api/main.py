@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from langchain_core.language_models import BaseChatModel
 
 from api.schemas import (
+    ModelsOut,
     ConfigOut,
     ConnectRequest,
     ExplainRequest,
@@ -39,7 +40,7 @@ from src.database import (
     get_schema,
     load_files_to_sqlite,
 )
-from src.llm import LLMConfigError, create_llm, is_auth_error
+from src.llm import LLMConfigError, create_llm, is_auth_error, list_models
 from src.pipeline import QueryPipeline, Turn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -194,6 +195,17 @@ def config() -> ConfigOut:
         examples=EXAMPLE_QUESTIONS,
         max_upload_mb=settings.max_upload_mb,
     )
+
+
+@app.get("/api/models", response_model=ModelsOut)
+def provider_models(provider: str, x_api_key: ApiKey = None) -> ModelsOut:
+    """Live list of chat models the given (or server) key can use."""
+    if provider not in PROVIDER_MODELS:
+        raise HTTPException(400, f"Unknown provider: {provider}")
+    try:
+        return ModelsOut(provider=provider, models=list_models(provider, x_api_key or settings.api_key_for(provider)))
+    except LLMConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/api/sources/{source_id}", response_model=SourceOut)

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
+import urllib.error
+import urllib.request
 
 from langchain_core.language_models import BaseChatModel
 
@@ -56,3 +60,61 @@ def is_auth_error(exc: BaseException) -> bool:
         "401",
     )
     return any(m in text for m in markers)
+
+
+# Model ids that are not chat/text models (speech, images, embeddings, realtime...).
+_NON_CHAT = re.compile(r"tts|image|embed|live|audio|realtime|transcribe|search|instruct|robotics|computer-use|moderation|dall-e|whisper|codex|aqa")
+
+
+def _fetch_json(url: str, headers: dict[str, str], timeout: float = 15) -> dict:
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (400, 401, 403):
+            raise LLMConfigError("That API key was rejected by the provider. Check it and try again.") from exc
+        raise LLMConfigError(f"Couldn't load models from the provider (HTTP {exc.code}).") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise LLMConfigError("Couldn't reach the provider to load models.") from exc
+
+
+def _gemini_sort_key(name: str) -> tuple:
+    m = re.match(r"gemini-(\d+(?:\.\d+)?)", name)
+    version = float(m.group(1)) if m else 0.0
+    return (-version, "preview" in name or "exp" in name, "lite" in name, "pro" in name, name)
+
+
+def list_models(provider: str, api_key: str) -> list[str]:
+    """Ask the provider which chat models this key can use, newest first."""
+    if not api_key:
+        raise LLMConfigError("Add an API key to load the model list.")
+    if provider == "gemini":
+        names: list[str] = []
+        token = ""
+        for _ in range(5):
+            url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+            if token:
+                url += f"&pageToken={token}"
+            data = _fetch_json(url, {"x-goog-api-key": api_key})
+            for m in data.get("models", []):
+                name = m.get("name", "").removeprefix("models/")
+                if (
+                    name.startswith("gemini")
+                    and "generateContent" in m.get("supportedGenerationMethods", [])
+                    and not _NON_CHAT.search(name)
+                ):
+                    names.append(name)
+            token = data.get("nextPageToken", "")
+            if not token:
+                break
+        return sorted(set(names), key=_gemini_sort_key)
+    if provider == "openai":
+        data = _fetch_json("https://api.openai.com/v1/models", {"Authorization": f"Bearer {api_key}"})
+        models = [
+            m for m in data.get("data", [])
+            if re.match(r"(gpt-|o\d|chatgpt-)", m.get("id", "")) and not _NON_CHAT.search(m["id"])
+        ]
+        models.sort(key=lambda m: m.get("created", 0), reverse=True)
+        return [m["id"] for m in models]
+    raise LLMConfigError(f"Unknown LLM provider: {provider!r}")

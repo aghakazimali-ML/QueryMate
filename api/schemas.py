@@ -115,6 +115,13 @@ class HistoryEntryOut(BaseModel):
     error: str
 
 
+class ModelsOut(BaseModel):
+    """Models available to an API key."""
+
+    provider: str
+    models: list[str]
+
+
 class ConfigOut(BaseModel):
     """Frontend bootstrap data."""
 

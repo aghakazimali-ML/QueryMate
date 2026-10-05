@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
-import { Database, Eraser, FileUp, KeyRound, Loader2, Music2, Plug, Settings2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Database, Eraser, FileUp, KeyRound, Loader2, Music2, Plug, Settings2, TriangleAlert } from "lucide-react";
+import { api } from "@/lib/api";
 import type { AppConfig, LLMSettings, Provider, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SchemaExplorer } from "./schema-explorer";
@@ -37,8 +38,38 @@ export function Sidebar(p: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState("");
   const [drag, setDrag] = useState(false);
-  const models = p.config?.models[p.llm.provider] ?? [p.llm.model];
   const serverKey = p.config?.server_keys[p.llm.provider];
+  const [live, setLive] = useState<Partial<Record<Provider, string[]>>>({});
+  const [modelStatus, setModelStatus] = useState<{ state: "idle" | "loading" | "ok" | "error"; text?: string }>({ state: "idle" });
+
+  // When a key is available, ask the provider which models it can use (debounced while typing).
+  const { provider, apiKey } = p.llm;
+  useEffect(() => {
+    if (!apiKey && !serverKey) {
+      setModelStatus({ state: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setModelStatus({ state: "loading" });
+    const t = setTimeout(() => {
+      api
+        .models(provider, apiKey)
+        .then((r) => {
+          if (cancelled) return;
+          setLive((prev) => ({ ...prev, [provider]: r.models }));
+          setModelStatus({ state: "ok", text: `${r.models.length} models available for this key` });
+        })
+        .catch((e: Error) => !cancelled && setModelStatus({ state: "error", text: e.message }));
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [provider, apiKey, serverKey]);
+
+  const fetched = live[provider];
+  const base = fetched?.length ? fetched : (p.config?.models[provider] ?? []);
+  const models = base.includes(p.llm.model) || !p.llm.model ? base : [p.llm.model, ...base];
 
   const setProvider = (provider: Provider) =>
     p.setLlm({ ...p.llm, provider, model: p.config?.default_models[provider] ?? p.config?.models[provider][0] ?? "" });
@@ -70,6 +101,21 @@ export function Sidebar(p: Props) {
               <option key={m}>{m}</option>
             ))}
           </select>
+          {modelStatus.state === "loading" && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading models for this key…
+            </span>
+          )}
+          {modelStatus.state === "ok" && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <CheckCircle2 className="h-3 w-3 text-primary" /> {modelStatus.text}
+            </span>
+          )}
+          {modelStatus.state === "error" && (
+            <span className="flex items-start gap-1 text-[11px] text-red-400">
+              <TriangleAlert className="mt-px h-3 w-3 shrink-0" /> {modelStatus.text}
+            </span>
+          )}
         </label>
         <label className="block space-y-1 text-sm">
           <span className="flex items-center gap-1 text-muted-foreground">

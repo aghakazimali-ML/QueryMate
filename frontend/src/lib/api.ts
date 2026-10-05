@@ -53,6 +53,8 @@ const llmBody = (s: LLMSettings) => ({ provider: s.provider, model: s.model, tem
 
 export const api = {
   config: () => request<AppConfig>("/api/config"),
+  models: (provider: string, apiKey: string) =>
+    request<{ provider: string; models: string[] }>(`/api/models?provider=${encodeURIComponent(provider)}`, {}, apiKey),
   source: (id: string) => request<Source>(`/api/sources/${encodeURIComponent(id)}`),
   upload: (files: File[]) => {
     const form = new FormData();

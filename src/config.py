@@ -18,10 +18,17 @@ CHINOOK_PATH = DATA_DIR / "Chinook_Sqlite.sqlite"
 
 Provider = Literal["gemini", "openai"]
 
-# Models offered in the settings panel for each provider (first one is the default).
+# Fallback models for the settings panel (first one is the default). With an API key,
+# the app asks the provider for its live model list instead (see src/llm.py:list_models).
 PROVIDER_MODELS: dict[str, list[str]] = {
-    "gemini": ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
-    "openai": ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"],
+    "gemini": [
+        "gemini-2.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-3-pro-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+    ],
+    "openai": ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"],
 }
 
 
