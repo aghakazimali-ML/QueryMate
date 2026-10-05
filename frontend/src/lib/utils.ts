@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const APP_PATH = "/app";
-export const GITHUB_URL = import.meta.env.VITE_GITHUB_URL ?? "https://github.com/";
+export const GITHUB_URL = import.meta.env.VITE_GITHUB_URL ?? "https://github.com/aghakazimali-ML/querymate";
 
 /** 1234.5 -> "1,234.50", 1234 -> "1,234", strings unchanged. */
 export function formatValue(value: unknown): string {
